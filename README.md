@@ -5,11 +5,13 @@ Getestet auf Linux Mint 22.3 (Zena, Ubuntu 24.04 Basis) mit QLC+ 5.3.1.
 ## Uebersicht / Verkabelung
 
 ```
-Laptop (Mint, QLC+) --LAN-Kabel--> Showtec Net-2/5 Pocket (50808, Default-IP 2.0.0.1)
-                                        | DMX (Port A, 5-pol XLR) --5->3-Adapter--> Fixture DMX-IN (3-pol)
+Variante A (direkt):  Laptop --LAN-Kabel--> Net-2/5 (Default-IP 2.0.0.1)
+Variante B (Heimnetz, empfohlen): Laptop --WLAN--> Fritzbox --LAN/Switch--> Net-2/5 (IP per DHCP, z. B. 192.168.188.61)
+                                        | DMX (Port 01, 5-pol XLR) --5->3-Adapter--> Fixture DMX-IN (3-pol)
 ```
 
-Protokoll-Kette: **QLC+ Universe 1 -> Art-Net Universe 0 (UDP 6454 Broadcast) -> Net-2/5 Port 01 (Net 0 / Primary 0) -> DMX-512**
+Protokoll-Kette: **QLC+ Universe 1 -> Art-Net Universe 0 (UDP 6454) -> Net-2/5 Port 01 (Net 0 / Primary 0) -> DMX-512**
+Art-Net wird als Broadcast gesendet (z. B. 192.168.188.255:6454); falls der Broadcast nicht durchgereicht wird: Unicast auf die Node-IP einstellen (siehe 3b).
 
 Hinweis Universe-Nummerierung: QLC+ zaehlt ab 1, Art-Net ab 0. QLC+ Universe 1 landet automatisch auf Art-Net Universe 0.
 
@@ -58,6 +60,35 @@ IPv4 manuell 2.0.0.100 / Praefix 8 (Netzmaske 255.0.0.0), Gateway leer,
   -> Downloads -> neueste `50808_firmware Vx-x.zip` -> entpacken (.upf) -> Webinterface
   "Firmware Upgrade" -> Choose File -> **Upload File** (nicht Apply!). Danach "Set Default".
   (Achtung: nur 50808-Dateien, nicht 50807/50809 = Net-2/3!)
+- Webinterface antwortet mit **HTTP 401**? Einfach **Admin / Admin** eingeben (Basic-Auth-Popup).
+  Browser-Popup kommt nicht? URL direkt: `http://Admin:Admin@2.0.0.1/`
+- Ohne Webinterface geht alles auch ueber das **OLED-Display am Geraet** (Tasten MENU/UP/DOWN/ENTER):
+  - Status-Seiten (nach Boot, UP/DOWN blättern): **DEVICE INFO** (IP, Netmask) und **PORT STATUS** (Port A/B: In/Out, Protoc, Univer)
+  - **MENU -> Hauptmenue**: 2. IP Mode (DHCP IP / Manual IP), 3. Set Netmask, 4. Set DMX Port, 5. Set Display
+
+### 3b. Net-2/5 im Heimnetz betreiben (DHCP ueber Fritzbox) — getestet
+
+Empfohlene Variante: Node steckt an Fritzbox-LAN (oder Switch daran), bekommt per DHCP eine IP.
+
+1. Node zunaechst direkt an Laptop (Profil ArtNet-Net25 aktiv, `ping 2.0.0.1` ok), Webinterface `http://2.0.0.1` (Admin/Admin):
+   - Port Settings wie in 3. (Port 01 = Output/ArtNet/Net 0/Primary 0/40Hz, Port 02 = Disable)
+   - Device Settings: **DHCP Enable = ON** -> Apply -> Node bootet neu (ggf. Power-Cycle noetig)
+2. Node an Fritzbox-LAN/Switch umstecken, 12-V-Netzteil dran. Fritzbox: Heimnetz -> Netzwerk -> Geraet suchen (MAC z. B. A0:AF:BD:...) -> IP notieren (z. B. 192.168.188.61) -> **"Diesem Netzwerkgeraet immer dieselbe IPv4-Adresse zuweisen"** aktivieren.
+3. Laptop: Ethernet-Port frei (`sudo nmcli device disconnect enp0s31f6`, falls aktiv), WLAN verbinden:
+   ```bash
+   ping -c 4 192.168.188.61
+   ip neigh show 192.168.188.61     # MAC des Node, z. B. a0:af:bd:6e:43:c1
+   ```
+4. QLC+ neu starten -> Inputs/Outputs -> Universe 1 -> Output: **"ART-NET (192.168.188.98)"** (die **WLAN-IP** des Laptops!) -> Input None -> Strg+S.
+5. Test: Simple Desk-Schieber bewegen -> **ACT-LED am Node blinkt**, blaue DMX-LED an Port 01 leuchtet.
+
+**Fallback Unicast** (wenn Broadcast WLAN->LAN nicht durchgereicht wird, ACT bleibt dunkel obwohl tcpdump Pakete zeigt):
+QLC+ Inputs/Outputs -> Zahnrad beim **ArtNet**-Plugin -> Outputs -> Universe 1 -> Spalte **IP-Adresse = 192.168.188.61** (statt Broadcast) -> OK -> Strg+S.
+
+**Hinweise:**
+- Im DHCP-Modus ist die Netmask im Display-Menue gesperrt (kommt vom DHCP-Server = 255.255.255.0). Die Anzeige 255.0.0.0 ist nur der gespeicherte statische Restwert.
+- Ping/ARP zum Node gehen, aber ACT blinkt nicht? Meist **Stecker/Kabel-Problem** (NO-CARRIER bzw. schlechter Kontakt) oder Switch-Port mit fremdem VLAN — Node testweise direkt an Fritzbox-LAN haengen.
+- Webinterface (TCP 80) antwortet nicht, Ping aber schon? Node powercyclen (am besten direkt an der Fritzbox), dann ist das Web-UI wieder da.
 
 ## 4. QLC+: Art-Net-Ausgang + Fixtures
 
@@ -74,24 +105,41 @@ IPv4 manuell 2.0.0.100 / Praefix 8 (Netzmaske 255.0.0.0), Gateway leer,
 ## 5. Fixtures einstellen
 
 - **Stairville LED BossFx-1 Bundle**: Schluesselschalter stecken (Laser! nie in den Strahl schauen).
-  Display-Menue: Betriebsart DMX, **`xxCH` = 28CH**, **`dXXX` = 001**.
+  Display-Menue (Tasten MODE/UP/DOWN/ENTER): Hauptmenue zeigt u. a. **DNH** (das ist "dMX" = DMX-Modus; das Display sieht aus wie "DNH"), SOU (Sound), AUT (Auto-Shows), COL (Farbe), SLA (Slave), SYS.
+  -> **DNH** waehlen -> **`dXXX` = 001**, **`xxCH` = 28CH**.
   DMX-IN ist 3-polig -> am Net-2/5 den 5->3-Pol-Adapter (1:1, 2:2, 3:3) verwenden.
   Letztes Geraet der Kette mit 120-Ohm-Terminator am DMX-OUT abschliessen.
 - **beamZ Par64 DMX 151.257** (Display-Variante): Taste **MODE** bis **Addr / A001** erscheint,
   **ENTER**, mit UP/DOWN **A001** einstellen, **ENTER** (= DMX-Modus, Adresse 001).
 
-## 6. Test
+## 6. Test (getestet: alle BossFx-1-Komponenten OK)
 
-Simple Desk -> Universe 1:
-- BossFx-1: Kanal 10 (Spot 1 Dimmer) = 255, Kanal 6 (Spot 1 Red) = 255 -> Spot 1 rot.
-  Laser-Kanaele 21/22 erst auf 0 (Blackout) lassen!
+Simple Desk -> Universe 1 -> Kanalansicht "Fixture-Kanaele", GM = 100 %, alles erst auf 0:
+
+| Kanaele | Erwartung |
+|---|---|
+| ch10=255 + ch6=255 | Spot 1 rot hell |
+| ch7=255 (statt ch6) / +ch8=255 | Spot 1 gruen / weiss |
+| ch9=255 | Spot 1 Strobe |
+| ch15=255 + ch11=255, ch14=255 | Spot 2 rot + Strobe |
+| ch1-3=255, ch5=100/200/0, ch4=255 | Derby 1 weiss, Motor CW/CCW/Stopp, Strobe |
+| ch16-18=255, ch20=200, ch19=255 | Derby 2 analog |
+| ch24-27=**5-9** | weisse Strobe-LEDs **dauerhaft an** (10-255 = blinken!) |
+| ch28=**5-9** | **UV dauerhaft an** (10-255 = blinken!) |
+| ch21=5, ch22=5, ch23=200 (kurz!, dann 21-23=0) | Laser rot/gruen/Motor — nie in den Strahl schauen! |
+
 - beamZ PAR: Kanal 1 (Master Dimmer) = 255, Kanal 6 (Mode) = 0 (DMX-Modus!), Kanal 2 = 255 -> rot.
+- **Wichtig:** UV/Strobe "dauerhaft an" heisst Wert **5-9**, nicht 255 (255 = Strobe-Modus des Geraets).
+- Kanalreihenfolge in QLC+ folgt der DMX-Belegung des Geraets (fix: Derby1=1-5, Spot1=6-10, Spot2=11-15, Derby2=16-20, Laser=21-23, Strobes=24-27, UV=28) und laesst sich nicht umsortieren. Die Wunsch-Anordnung (unten Derby/Spots, oben Strobes/UV/Laser) bildest du in der **Virtual Console** mit eigenen Rahmen/Buttons nach.
 
 ## 7. Troubleshooting
 
 - `ip link show enp0s31f6` muss `LOWER_UP` + `state UP` zeigen, sonst Kabel/Port pruefen (NO-CARRIER = kein Kabel erkannt).
-- `ping 2.0.0.1` muss antworten; OLED des Net-2/5 zeigt die IP (Default 2.0.0.1).
-- Am Net-2/5: blaue DMX-LED an Port 01 = DMX-Ausgang aktiv; ACT-LED blinkt bei Netzwerkverkehr.
+- `ping 2.0.0.1` muss antworten (direkt) bzw. `ping <Node-IP>` (DHCP-Modus); OLED des Net-2/5 zeigt die IP.
+- ACT-LED blinkt nicht, obwohl QLC+ sendet (tcpdump auf WLAN-Interface: `sudo tcpdump -i wlp0s20f3 -n udp port 6454`)?
+  -> Kabel/Stecker checken, Node direkt an Fritzbox testen, Port-Status am OLED pruefen, ggf. Art-Net auf Unicast (3b).
+- Im DHCP-Modus in QLC+ **immer die WLAN-IP** als ART-NET-Output waehlen, nicht 2.0.0.100.
+- Am Net-2/5: blaue DMX-LED an Port 01 = DMX-Ausgang aktiv; ACT-LED blinkt bei Art-Net-Verkehr.
 - QLC+ DMX-Monitor (Inputs/Outputs-Tab) zeigt gesendete Werte.
 - Universum stimmt nicht? QLC+ Universe 1 = Art-Net Universe 0 = Node Primary 0.
 - Fixture taucht nicht in Add auf? Datei direkt in `~/.qlcplus/fixtures/` (kein Unterordner), QLC+ neu starten.
