@@ -145,8 +145,16 @@ Simple Desk -> Universe 1 -> Kanalansicht "Fixture-Kanaele", GM = 100 %, alles e
 - Fixture taucht nicht in Add auf? Datei direkt in `~/.qlcplus/fixtures/` (kein Unterordner), QLC+ neu starten.
 - PAR reagiert nicht: Dimmer-Kanal auf 255, Mode-Kanal im DMX-Bereich (0), richtiger XLR-Eingang (IN, nicht OUT), 5->3-Adapter korrekt verdrahtet, Terminator am Ende.
 
+## 8. Autarker Show-Player: ESP32 als DMX-Master (~5-8 EUR, siehe `esp32-dmx-player/`)
+
+Wer die Show ohne Laptop/Netzteil ueberall abspielen will: ESP32-WROOM-32 + MAX3485 (RS-485) + XLR-Buchse.
+DMX-512 direkt an die Lampe, Show im Flash gespeichert, **Autostart beim Einschalten** (USB-Strom).
+Aufnahme der QLC+-Show per DMX-Bus (Serial-Befehl `r`). Sketch, Verkabelung und Anleitung:
+[`esp32-dmx-player/`](esp32-dmx-player/README.md)
+
 ## Dateien
 
 - `fixtures/Stairville-LED-BossFx-1.qxf` – BossFx-1, 28-Kanal-Modus (Quelle: Thomann-Handbuch 424577, S. 25-27)
 - `fixtures/beamZ-PAR64-151257.qxf` – beamZ Par64 DMX 151.257 (Display-Version, 6 Kanäle)
 - `setup-artnet-profile.sh` – Netzwerkprofil am Laptop
+- `esp32-dmx-player/` – autarker DMX-Show-Player (ESP32 + MAX3485), Sketch + Doku
